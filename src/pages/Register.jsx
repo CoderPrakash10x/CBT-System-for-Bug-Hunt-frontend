@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { registerUser } from "../api/auth.api";
+import EvolveraLogo from "../assets/evolvera.png"; // 👈 logo path adjust if needed
 
 const Register = () => {
   const [form, setForm] = useState({
@@ -16,9 +17,9 @@ const Register = () => {
 
   const submit = async () => {
     if (!form.name || !form.email || !form.college) {
-        return setError("All fields are required!");
+      return setError("All fields are required!");
     }
-    
+
     setError("");
     setLoading(true);
 
@@ -37,75 +38,89 @@ const Register = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0c] text-white p-4 relative overflow-hidden">
-      {/* Decorative Background Elements */}
-      <div className="absolute top-[-10%] left-[-10%] w-64 h-64 bg-primary/10 rounded-full blur-[120px]"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-64 h-64 bg-blue-500/10 rounded-full blur-[120px]"></div>
+    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0c] text-white px-4 relative overflow-hidden">
+      {/* Ambient Glow */}
+      <div className="absolute -top-40 -left-40 w-96 h-96 bg-orange-500/10 rounded-full blur-[140px]" />
+      <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-orange-400/10 rounded-full blur-[140px]" />
 
-      <div className="bg-[#141417] border border-white/5 p-8 md:p-10 rounded-[2rem] w-full max-w-md shadow-2xl relative z-10 backdrop-blur-sm">
+      <div className="relative z-10 w-full max-w-md bg-[#141417]/90 border border-white/10 rounded-[2rem] p-8 md:p-10 shadow-[0_0_60px_rgba(0,0,0,0.6)] backdrop-blur-xl">
+        
+        {/* LOGO */}
+        <div className="flex justify-center mb-6">
+          <img
+            src={EvolveraLogo}
+            alt="Evolvera Club"
+            className="h-14 opacity-90"
+          />
+        </div>
+
+        {/* TITLE */}
         <div className="text-center mb-10">
-          <h1 className="text-4xl font-black italic tracking-tighter text-white mb-2">
-            BUG <span className="text-primary underline decoration-2 underline-offset-4">HUNT</span>
+          <h1 className="text-4xl font-black tracking-tight text-white mb-2">
+            BUG <span className="text-orange-400">HUNT</span>
           </h1>
-          <p className="text-gray-500 text-sm font-medium uppercase tracking-[0.2em]">Enter the Arena</p>
+          <p className="text-gray-500 text-xs uppercase tracking-[0.3em]">
+            Powered by Evolvera Club
+          </p>
         </div>
 
-        <div className="space-y-4">
-          <div className="group">
-            <label className="text-[10px] uppercase tracking-widest text-gray-500 ml-2 mb-1 block font-bold group-focus-within:text-primary transition-colors">Full Name</label>
-            <input
-              name="name"
-              placeholder="John Doe"
-              className="w-full p-4 bg-[#0a0a0c] border border-white/5 rounded-2xl focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-gray-700"
-              onChange={handleChange}
-            />
-          </div>
-
-          <div className="group">
-            <label className="text-[10px] uppercase tracking-widest text-gray-500 ml-2 mb-1 block font-bold group-focus-within:text-primary transition-colors">Email Address</label>
-            <input
-              name="email"
-              type="email"
-              placeholder="john@example.com"
-              className="w-full p-4 bg-[#0a0a0c] border border-white/5 rounded-2xl focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-gray-700"
-              onChange={handleChange}
-            />
-          </div>
-
-          <div className="group">
-            <label className="text-[10px] uppercase tracking-widest text-gray-500 ml-2 mb-1 block font-bold group-focus-within:text-primary transition-colors">College Name</label>
-            <input
-              name="college"
-              placeholder="IIT Bombay"
-              className="w-full p-4 bg-[#0a0a0c] border border-white/5 rounded-2xl focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-gray-700"
-              onChange={handleChange}
-            />
-          </div>
+        {/* FORM */}
+        <div className="space-y-5">
+          {[
+            { label: "Full Name", name: "name", placeholder: "John Doe" },
+            {
+              label: "Email Address",
+              name: "email",
+              type: "email",
+              placeholder: "john@example.com",
+            },
+            {
+              label: "College Name",
+              name: "college",
+              placeholder: "IIT Bombay",
+            },
+          ].map((field) => (
+            <div key={field.name} className="group">
+              <label className="block text-[10px] uppercase tracking-widest text-gray-500 ml-2 mb-1 font-bold group-focus-within:text-orange-400 transition-colors">
+                {field.label}
+              </label>
+              <input
+                {...field}
+                onChange={handleChange}
+                className="w-full p-4 rounded-2xl bg-[#0a0a0c] border border-white/10 
+                text-white placeholder:text-gray-600 
+                focus:border-orange-400 focus:ring-1 focus:ring-orange-400 
+                outline-none transition-all"
+              />
+            </div>
+          ))}
         </div>
 
+        {/* CTA */}
         <button
           onClick={submit}
           disabled={loading}
-          className={`
-            w-full py-5 mt-8 rounded-2xl font-black uppercase tracking-widest transition-all duration-300
+          className={`w-full mt-8 py-5 rounded-2xl font-black uppercase tracking-widest transition-all duration-300
             ${
               loading
                 ? "bg-gray-800 text-gray-500 cursor-not-allowed"
-                : "bg-primary text-black hover:shadow-[0_0_30px_rgba(204,255,0,0.3)] hover:scale-[1.02] active:scale-95"
-            }
-          `}
+                : "bg-orange-400 text-black hover:shadow-[0_0_40px_rgba(251,146,60,0.4)] hover:scale-[1.02] active:scale-95"
+            }`}
         >
-          {loading ? "Initializing..." : "Register Now"}
+          {loading ? "Initializing..." : "Enter Arena"}
         </button>
 
+        {/* ERROR */}
         {error && (
-          <div className="mt-6 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-xs text-center font-bold animate-shake">
+          <div className="mt-6 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs text-center font-bold">
             ⚠️ {error}
           </div>
         )}
 
-        <p className="mt-8 text-center text-gray-600 text-[10px] uppercase tracking-widest leading-loose">
-          By joining, you agree to the <br /> code of conduct and event rules.
+        {/* FOOTER */}
+        <p className="mt-10 text-center text-gray-600 text-[10px] uppercase tracking-widest leading-loose">
+          Organized by Evolvera Club <br />
+          <span className="opacity-70">Designed by Prakash Dubey</span>
         </p>
       </div>
     </div>

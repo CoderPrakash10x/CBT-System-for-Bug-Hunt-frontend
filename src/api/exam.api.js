@@ -1,18 +1,14 @@
-import api from "./axios";
+import API from "./axios";
 
-// USER ENDPOINTS
-export const getExam = () => api.get("/exam");
+// USER
+export const getExam = () => API.get("/exam");
+export const joinExam = (userId) => API.post("/exam/join", { userId });
+export const submitExam = (data) => API.post("/exam/submit", data);
+export const saveAnswer = (data) => API.post("/exam/answer", data);
+export const updateTabCount = (data) =>
+  API.post("/exam/update-tab-count", data);
 
-export const joinExam = (userId) => api.post("/exam/join", { userId });
-
-export const saveAnswer = (data) => api.post("/exam/answer", data);
-
-export const submitExam = (data) => api.post("/exam/submit", data);
-
-// ADMIN ENDPOINTS 
-// (Interceptors automatically add the key here)
-export const startExam = () => api.post("/exam/start");
-
-export const endExam = () => api.post("/exam/end");
-
-export const resetEvent = () => api.post("/exam/reset");
+// ADMIN
+export const startExam = () => API.post("/exam/start", {});
+export const endExam = () => API.post("/exam/end");
+export const resetEvent = () => API.post("/exam/reset");
