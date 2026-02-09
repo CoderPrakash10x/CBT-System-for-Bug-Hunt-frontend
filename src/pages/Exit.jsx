@@ -31,13 +31,6 @@ const Exit = () => {
         {/* Actions */}
         <div className="grid gap-4">
           <a
-            href="/leaderboard"
-            className="block w-full py-5 bg-orange-500 text-black rounded-2xl font-black tracking-widest hover:bg-orange-400 transition-all shadow-xl shadow-orange-900/20"
-          >
-            VIEW LEADERBOARD
-          </a>
-
-          <a
             href="/"
             className="block w-full py-5 bg-white/5 text-gray-400 rounded-2xl font-bold tracking-widest hover:bg-white/10 transition-all"
           >
