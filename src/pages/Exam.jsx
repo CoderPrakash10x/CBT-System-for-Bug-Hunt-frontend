@@ -40,30 +40,28 @@ const Exam = () => {
         })
         .catch(() => {
           setIsFs(false);
-          showAlert("Grant Fullscreen Permission to Continue!");
+          // Agar entry pe mana kiya toh seedha exit
+          window.location.replace("/exit");
         });
     }
   };
 
-  /* ================= FINAL SUBMIT ================= */
+  /* ================= FINAL SUBMIT (Aggressive Redirect) ================= */
   const handleFinalSubmit = useCallback(async () => {
     if (submitting) return;
     setSubmitting(true);
     try {
       await submitExam({ userId });
-      
-      // 🛡️ SECURITY: Mark as finished to prevent back-navigation
       localStorage.setItem("examFinished", "true");
       localStorage.removeItem("examStarted");
-      
+
       if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
+        document.exitFullscreen().catch(() => { });
       }
-      window.location.href = "/exit";
+      // Replace use kar rahe hain taaki back na aa sake
+      window.location.replace("/exit");
     } catch (err) {
-      console.error("Submission failed", err);
-      setSubmitting(false);
-      showAlert("Submission Failed! Try again.");
+      window.location.replace("/exit");
     }
   }, [userId, submitting]);
 
@@ -105,22 +103,19 @@ const Exam = () => {
   const startExamFlow = async () => {
     try {
       if (!userId) return (window.location.href = "/");
-      
       const [joinRes, qRes] = await Promise.all([
         joinExam(userId),
         getQuestions(userId),
       ]);
 
       if (joinRes.data.isDisqualified) {
-        window.location.href = "/exit";
+        window.location.replace("/exit");
         return;
       }
 
       setTimeLeft(joinRes.data.remainingSeconds);
       const fetchedQs = qRes.data.questions || [];
-      
       if (!fetchedQs.length) {
-        showAlert("No questions assigned yet!");
         setStatus("waiting");
         return;
       }
@@ -150,87 +145,56 @@ const Exam = () => {
     return () => clearInterval(timerRef.current);
   }, [status, handleFinalSubmit]);
 
-  /* ================= ANTI-CHEAT (HARDENED) ================= */
+  /* ================= ANTI-CHEAT (INSTANT KICK) ================= */
   useEffect(() => {
     if (status !== "live") return;
 
-    const reportViolation = async () => {
-      const now = Date.now();
-      if (now - lastViolationRef.current < 3000) return; 
-      lastViolationRef.current = now;
-
-      try {
-        const res = await API.post("/exam/update-tab-count", { userId });
-        if (res.data.isDisqualified) {
-          handleFinalSubmit();
-        }
-      } catch (err) {
-        console.error("Violation reporting failed");
-      }
-    };
-
-    // 🛡️ Win+D, Minimize, or clicking outside the browser
-    const handleBlur = () => {
-      reportViolation();
-      showAlert("WARNING: Window minimized or lost focus! Investigation Logged.");
-    };
-
-    const handleBeforeUnload = (e) => {
-      e.preventDefault();
-      e.returnValue = "STRICT LOCKDOWN: Don't refresh!";
-    };
-
-    const handleKeydown = (e) => {
-      if (
-        e.keyCode === 116 || (e.ctrlKey && e.keyCode === 82) || 
-        e.keyCode === 123 || (e.ctrlKey && e.shiftKey && e.keyCode === 73) ||
-        (e.ctrlKey && e.keyCode === 85) || e.keyCode === 122
-      ) {
-        e.preventDefault();
-        showAlert("ACTION RESTRICTED: Investigation Logged.");
-      }
-    };
-
-    const onVisibility = () => {
-      if (document.hidden) {
-        reportViolation();
-        showAlert("WARNING: Tab switch detected! Admin notified.");
+    // Instant exit without warning
+    const instantKick = () => {
+      if (!submitting) {
+        localStorage.setItem("disqualified", "true"); // 👈 Ye line add kar do
+        handleFinalSubmit();
       }
     };
 
     const fsChange = () => {
-      if (!document.fullscreenElement && !submitting) {
-        setIsFs(false);
-        reportViolation();
-      } else {
-        setIsFs(true);
+      if (!document.fullscreenElement) instantKick();
+    };
+
+    const onVisibility = () => {
+      if (document.hidden) instantKick();
+    };
+
+    const handleBlur = () => instantKick();
+
+    const handleKeydown = (e) => {
+      // Block Keys: F5, Ctrl+R, F12, Ctrl+Shift+I, Ctrl+U, Esc (27)
+      if (
+        e.keyCode === 116 || (e.ctrlKey && e.keyCode === 82) ||
+        e.keyCode === 123 || (e.ctrlKey && e.shiftKey && e.keyCode === 73) ||
+        (e.ctrlKey && e.keyCode === 85) || e.keyCode === 27
+      ) {
+        e.preventDefault();
+        if (e.keyCode === 27) instantKick(); // Esc par instant kick
+        return false;
       }
     };
 
-    const handleContextMenu = (e) => {
-      e.preventDefault();
-      showAlert("RIGHT-CLICK DISABLED!");
-      return false;
-    };
-
-    window.addEventListener("blur", handleBlur); // 🛡️ Win+D detection
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    document.addEventListener("contextmenu", handleContextMenu);
-    document.addEventListener("keydown", handleKeydown);
+    window.addEventListener("blur", handleBlur);
     document.addEventListener("visibilitychange", onVisibility);
     document.addEventListener("fullscreenchange", fsChange);
+    document.addEventListener("keydown", handleKeydown);
+    document.addEventListener("contextmenu", (e) => e.preventDefault());
 
     return () => {
       window.removeEventListener("blur", handleBlur);
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-      document.removeEventListener("contextmenu", handleContextMenu);
-      document.removeEventListener("keydown", handleKeydown);
       document.removeEventListener("visibilitychange", onVisibility);
       document.removeEventListener("fullscreenchange", fsChange);
+      document.removeEventListener("keydown", handleKeydown);
     };
-  }, [status, userId, submitting, handleFinalSubmit]);
+  }, [status, handleFinalSubmit, submitting]);
 
-  /* ================= UI STATES ================= */
+  /* ================= UI STATES (REMAINING AS IS) ================= */
   if (status === "loading" || status === "waiting")
     return <Center text="Establishing Secure Connection..." spinner />;
 
@@ -239,11 +203,10 @@ const Exam = () => {
       <div className="min-h-screen flex flex-col items-center justify-center bg-black">
         <div className="text-orange-500 text-sm font-black tracking-[0.5em] mb-4 uppercase">Locking Interface</div>
         <div className="text-[14rem] font-black text-white leading-none mb-10">{countdown}</div>
-        
         {isReady && (
-          <button 
+          <button
             onClick={enterFullscreen}
-            className="px-16 py-6 bg-orange-500 text-black font-black text-2xl rounded-2xl animate-pulse shadow-[0_0_50px_rgba(249,115,22,0.4)] transition-transform active:scale-95"
+            className="px-16 py-6 bg-orange-500 text-black font-black text-2xl rounded-2xl animate-pulse shadow-[0_0_50px_rgba(249,115,22,0.4)]"
           >
             START HUNT
           </button>
@@ -257,21 +220,7 @@ const Exam = () => {
 
     return (
       <div className="min-h-screen bg-[#0a0a0b] text-white p-4 font-sans select-none">
-        
-        {!isFs && !submitting && (
-          <div className="fixed inset-0 z-[1000] bg-black/95 flex flex-col items-center justify-center text-center p-6 backdrop-blur-md">
-            <h2 className="text-orange-500 text-5xl font-black italic mb-4">SYSTEM BREACH</h2>
-            <p className="text-gray-400 max-w-md mb-8 uppercase tracking-widest text-sm font-bold">
-              Secure environment compromised. Re-enter fullscreen to continue.
-            </p>
-            <button 
-              onClick={enterFullscreen}
-              className="px-12 py-5 bg-orange-500 text-black font-black rounded-2xl shadow-[0_0_50px_rgba(249,115,22,0.2)]"
-            >
-              RESTORE CONNECTION
-            </button>
-          </div>
-        )}
+        {/* Anti-cheat overlay handled by instantKick redirect, so no breach UI needed */}
 
         {modal.show && (
           <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[999] bg-red-600 text-white px-8 py-4 rounded-full font-black animate-bounce">
@@ -285,9 +234,9 @@ const Exam = () => {
               <div className="h-3 w-3 bg-orange-500 rounded-full animate-pulse"></div>
               <span className="font-black text-2xl tracking-tighter italic">BUG<span className="text-orange-500">HUNT</span></span>
             </div>
-            
+
             <div className="bg-black/50 px-8 py-2 rounded-xl border border-orange-500/20 font-mono text-4xl font-black text-orange-500">
-                {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, "0")}
+              {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, "0")}
             </div>
 
             <div className="text-right">
@@ -301,16 +250,16 @@ const Exam = () => {
               <div className="inline-block px-3 py-1 bg-orange-500/10 border border-orange-500/20 rounded-md mb-4 text-orange-500 text-[10px] font-black uppercase tracking-widest">Task Definition</div>
               <h2 className="text-2xl font-bold mb-6 leading-tight">{q.problemStatement}</h2>
               <div className="space-y-6">
-                 <div>
-                   <p className="text-orange-500 font-bold uppercase text-xs mb-2">Description</p>
-                   <p className="text-gray-400 text-sm leading-relaxed">{q.description}</p>
-                 </div>
-                 {q.constraints && (
-                    <div>
-                      <p className="text-orange-500 font-bold uppercase text-xs mb-2">Constraints</p>
-                      <pre className="text-gray-400 text-xs font-mono bg-black/30 p-3 rounded-lg">{q.constraints}</pre>
-                    </div>
-                 )}
+                <div>
+                  <p className="text-orange-500 font-bold uppercase text-xs mb-2">Description</p>
+                  <p className="text-gray-400 text-sm leading-relaxed">{q.description}</p>
+                </div>
+                {q.constraints && (
+                  <div>
+                    <p className="text-orange-500 font-bold uppercase text-xs mb-2">Constraints</p>
+                    <pre className="text-gray-400 text-xs font-mono bg-black/30 p-3 rounded-lg">{q.constraints}</pre>
+                  </div>
+                )}
               </div>
             </div>
 
