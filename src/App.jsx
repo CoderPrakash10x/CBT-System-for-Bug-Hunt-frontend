@@ -16,17 +16,26 @@ const AdminLayout = () => (
 );
 
 const App = () => {
+  const isFinished = localStorage.getItem("examFinished") === "true";
+
   return (
     <BrowserRouter>
       <Routes>
-        {/* PUBLIC */}
-        <Route path="/" element={<Register />} />
-        <Route path="/exam" element={<Exam />} />
+        {/* PUBLIC ROUTES WITH GUARDS */}
+        <Route 
+          path="/" 
+          element={isFinished ? <Navigate to="/exit" replace /> : <Register />} 
+        />
+        
+        <Route 
+          path="/exam" 
+          element={isFinished ? <Navigate to="/exit" replace /> : <Exam />} 
+        />
+        
         <Route path="/exit" element={<Exit />} />
         
+        {/* Rest of the routes... */}
         <Route path="/admin" element={<Admin />} />
-
-        {/* ADMIN ONLY */}
         <Route element={<AdminRoute />}>
           <Route element={<AdminLayout />}>
             <Route path="/admin/dashboard" element={<Admin />} />
@@ -35,10 +44,9 @@ const App = () => {
           </Route>
         </Route>
 
-        <Route path="*" element={<Navigate to="/" />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
 };
-
 export default App;

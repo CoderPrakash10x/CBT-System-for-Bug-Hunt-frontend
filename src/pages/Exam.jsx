@@ -19,8 +19,6 @@ const Exam = () => {
 
   const timerRef = useRef(null);
   const savingRef = useRef(false);
-  
-  // 🛡️ ANTI-DOUBLE-COUNT REF
   const lastViolationRef = useRef(0);
 
   /* ================= UI UTILS ================= */
@@ -53,6 +51,9 @@ const Exam = () => {
     setSubmitting(true);
     try {
       await submitExam({ userId });
+      
+      // 🛡️ SECURITY: Mark as finished to prevent back-navigation
+      localStorage.setItem("examFinished", "true");
       localStorage.removeItem("examStarted");
       
       if (document.fullscreenElement) {
@@ -127,6 +128,7 @@ const Exam = () => {
       setQuestions(fetchedQs.map((q) => ({ ...q, code: q.buggyCode })));
       setStatus("live");
       setIsReady(false);
+      localStorage.setItem("examStarted", "true");
     } catch (err) {
       setStatus("waiting");
     }
@@ -148,15 +150,13 @@ const Exam = () => {
     return () => clearInterval(timerRef.current);
   }, [status, handleFinalSubmit]);
 
-  /* ================= ANTI-CHEAT (HARDENED & DEBOUNCED) ================= */
+  /* ================= ANTI-CHEAT (HARDENED) ================= */
   useEffect(() => {
     if (status !== "live") return;
 
     const reportViolation = async () => {
       const now = Date.now();
-      // 3 seconds cooldown to prevent double-counting (Esc key exit)
-      if (now - lastViolationRef.current < 3000) return;
-      
+      if (now - lastViolationRef.current < 3000) return; 
       lastViolationRef.current = now;
 
       try {
@@ -169,13 +169,18 @@ const Exam = () => {
       }
     };
 
+    // 🛡️ Win+D, Minimize, or clicking outside the browser
+    const handleBlur = () => {
+      reportViolation();
+      showAlert("WARNING: Window minimized or lost focus! Investigation Logged.");
+    };
+
     const handleBeforeUnload = (e) => {
       e.preventDefault();
       e.returnValue = "STRICT LOCKDOWN: Don't refresh!";
     };
 
     const handleKeydown = (e) => {
-      // Disable F11, F12, Ctrl+R, Ctrl+Shift+I, Ctrl+U
       if (
         e.keyCode === 116 || (e.ctrlKey && e.keyCode === 82) || 
         e.keyCode === 123 || (e.ctrlKey && e.shiftKey && e.keyCode === 73) ||
@@ -202,13 +207,13 @@ const Exam = () => {
       }
     };
 
-    // 🛡️ DISABLE RIGHT CLICK
     const handleContextMenu = (e) => {
       e.preventDefault();
       showAlert("RIGHT-CLICK DISABLED!");
       return false;
     };
 
+    window.addEventListener("blur", handleBlur); // 🛡️ Win+D detection
     window.addEventListener("beforeunload", handleBeforeUnload);
     document.addEventListener("contextmenu", handleContextMenu);
     document.addEventListener("keydown", handleKeydown);
@@ -216,6 +221,7 @@ const Exam = () => {
     document.addEventListener("fullscreenchange", fsChange);
 
     return () => {
+      window.removeEventListener("blur", handleBlur);
       window.removeEventListener("beforeunload", handleBeforeUnload);
       document.removeEventListener("contextmenu", handleContextMenu);
       document.removeEventListener("keydown", handleKeydown);
@@ -252,7 +258,6 @@ const Exam = () => {
     return (
       <div className="min-h-screen bg-[#0a0a0b] text-white p-4 font-sans select-none">
         
-        {/* RE-ENTRY OVERLAY */}
         {!isFs && !submitting && (
           <div className="fixed inset-0 z-[1000] bg-black/95 flex flex-col items-center justify-center text-center p-6 backdrop-blur-md">
             <h2 className="text-orange-500 text-5xl font-black italic mb-4">SYSTEM BREACH</h2>
@@ -275,7 +280,6 @@ const Exam = () => {
         )}
 
         <div className="max-w-[1600px] mx-auto">
-          {/* HEADER */}
           <div className="flex justify-between items-center mb-4 bg-[#141417] p-4 rounded-2xl border border-white/5 shadow-xl">
             <div className="flex items-center gap-3">
               <div className="h-3 w-3 bg-orange-500 rounded-full animate-pulse"></div>
