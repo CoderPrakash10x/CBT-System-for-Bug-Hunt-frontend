@@ -14,11 +14,14 @@ const Exam = () => {
   const [current, setCurrent] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [modal, setModal] = useState({ show: false, message: "" });
-  const [isFs, setIsFs] = useState(true); 
-  const [isReady, setIsReady] = useState(false); 
+  const [isFs, setIsFs] = useState(true);
+  const [isReady, setIsReady] = useState(false);
 
   const timerRef = useRef(null);
   const savingRef = useRef(false);
+  
+  // 🛡️ ANTI-DOUBLE-COUNT REF
+  const lastViolationRef = useRef(0);
 
   /* ================= UI UTILS ================= */
   const showAlert = (msg) => {
@@ -49,11 +52,9 @@ const Exam = () => {
     if (submitting) return;
     setSubmitting(true);
     try {
-      // Pehle backend ko submit karo
       await submitExam({ userId });
       localStorage.removeItem("examStarted");
       
-      // Success ke baad hi fullscreen exit karo
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
       }
@@ -95,7 +96,7 @@ const Exam = () => {
       const t = setTimeout(() => setCountdown((c) => c - 1), 1000);
       return () => clearTimeout(t);
     } else {
-      setIsReady(true); // Enable "Start" button instead of auto-start
+      setIsReady(true);
     }
   }, [status, countdown]);
 
@@ -108,6 +109,11 @@ const Exam = () => {
         joinExam(userId),
         getQuestions(userId),
       ]);
+
+      if (joinRes.data.isDisqualified) {
+        window.location.href = "/exit";
+        return;
+      }
 
       setTimeLeft(joinRes.data.remainingSeconds);
       const fetchedQs = qRes.data.questions || [];
@@ -142,20 +148,38 @@ const Exam = () => {
     return () => clearInterval(timerRef.current);
   }, [status, handleFinalSubmit]);
 
-  /* ================= ANTI-CHEAT (HARDENED) ================= */
+  /* ================= ANTI-CHEAT (HARDENED & DEBOUNCED) ================= */
   useEffect(() => {
     if (status !== "live") return;
 
+    const reportViolation = async () => {
+      const now = Date.now();
+      // 3 seconds cooldown to prevent double-counting (Esc key exit)
+      if (now - lastViolationRef.current < 3000) return;
+      
+      lastViolationRef.current = now;
+
+      try {
+        const res = await API.post("/exam/update-tab-count", { userId });
+        if (res.data.isDisqualified) {
+          handleFinalSubmit();
+        }
+      } catch (err) {
+        console.error("Violation reporting failed");
+      }
+    };
+
     const handleBeforeUnload = (e) => {
       e.preventDefault();
-      e.returnValue = "STRICT LOCKDOWN: Don't refresh!"; 
+      e.returnValue = "STRICT LOCKDOWN: Don't refresh!";
     };
 
     const handleKeydown = (e) => {
+      // Disable F11, F12, Ctrl+R, Ctrl+Shift+I, Ctrl+U
       if (
         e.keyCode === 116 || (e.ctrlKey && e.keyCode === 82) || 
         e.keyCode === 123 || (e.ctrlKey && e.shiftKey && e.keyCode === 73) ||
-        (e.ctrlKey && e.keyCode === 85)
+        (e.ctrlKey && e.keyCode === 85) || e.keyCode === 122
       ) {
         e.preventDefault();
         showAlert("ACTION RESTRICTED: Investigation Logged.");
@@ -164,7 +188,7 @@ const Exam = () => {
 
     const onVisibility = () => {
       if (document.hidden) {
-        API.post("/exam/update-tab-count", { userId }).catch(() => {});
+        reportViolation();
         showAlert("WARNING: Tab switch detected! Admin notified.");
       }
     };
@@ -172,25 +196,33 @@ const Exam = () => {
     const fsChange = () => {
       if (!document.fullscreenElement && !submitting) {
         setIsFs(false);
-        API.post("/exam/update-tab-count", { userId }).catch(() => {});
+        reportViolation();
       } else {
         setIsFs(true);
       }
     };
 
+    // 🛡️ DISABLE RIGHT CLICK
+    const handleContextMenu = (e) => {
+      e.preventDefault();
+      showAlert("RIGHT-CLICK DISABLED!");
+      return false;
+    };
+
     window.addEventListener("beforeunload", handleBeforeUnload);
-    document.addEventListener("contextmenu", (e) => e.preventDefault());
+    document.addEventListener("contextmenu", handleContextMenu);
     document.addEventListener("keydown", handleKeydown);
     document.addEventListener("visibilitychange", onVisibility);
     document.addEventListener("fullscreenchange", fsChange);
 
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("contextmenu", handleContextMenu);
       document.removeEventListener("keydown", handleKeydown);
       document.removeEventListener("visibilitychange", onVisibility);
       document.removeEventListener("fullscreenchange", fsChange);
     };
-  }, [status, userId, submitting]);
+  }, [status, userId, submitting, handleFinalSubmit]);
 
   /* ================= UI STATES ================= */
   if (status === "loading" || status === "waiting")
@@ -199,7 +231,7 @@ const Exam = () => {
   if (status === "countdown")
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-black">
-        <div className="text-orange-500 text-sm font-black tracking-[0.5em] mb-4">LOCKING INTERFACE</div>
+        <div className="text-orange-500 text-sm font-black tracking-[0.5em] mb-4 uppercase">Locking Interface</div>
         <div className="text-[14rem] font-black text-white leading-none mb-10">{countdown}</div>
         
         {isReady && (
@@ -264,7 +296,18 @@ const Exam = () => {
             <div className="lg:col-span-4 bg-[#141417] p-8 rounded-[2rem] border border-white/5 h-[calc(100vh-180px)] overflow-y-auto custom-scrollbar">
               <div className="inline-block px-3 py-1 bg-orange-500/10 border border-orange-500/20 rounded-md mb-4 text-orange-500 text-[10px] font-black uppercase tracking-widest">Task Definition</div>
               <h2 className="text-2xl font-bold mb-6 leading-tight">{q.problemStatement}</h2>
-              {/* Constraints & Examples sections same as before */}
+              <div className="space-y-6">
+                 <div>
+                   <p className="text-orange-500 font-bold uppercase text-xs mb-2">Description</p>
+                   <p className="text-gray-400 text-sm leading-relaxed">{q.description}</p>
+                 </div>
+                 {q.constraints && (
+                    <div>
+                      <p className="text-orange-500 font-bold uppercase text-xs mb-2">Constraints</p>
+                      <pre className="text-gray-400 text-xs font-mono bg-black/30 p-3 rounded-lg">{q.constraints}</pre>
+                    </div>
+                 )}
+              </div>
             </div>
 
             <div className="lg:col-span-8 rounded-[2rem] overflow-hidden border-2 border-white/5 relative group">
@@ -280,32 +323,39 @@ const Exam = () => {
                     return copy;
                   });
                 }}
-                options={{ fontSize: 18, minimap: { enabled: false }, contextmenu: false }}
+                options={{ fontSize: 18, minimap: { enabled: false }, contextmenu: false, quickSuggestions: false }}
               />
             </div>
           </div>
 
           <div className="flex justify-between items-center mt-6">
             <button
-              disabled={current === 0}
+              disabled={current === 0 || submitting}
               onClick={() => setCurrent((c) => c - 1)}
               className={`px-10 py-4 rounded-2xl font-black transition-all ${current === 0 ? 'opacity-20' : 'bg-white/5 hover:bg-white/10'}`}
             >PREVIOUS</button>
 
             <button
-              onClick={() => {
+              disabled={submitting}
+              onClick={async () => {
                 if (current === questions.length - 1) {
-                  if (window.confirm("FINAL SUBMISSION?")) handleFinalSubmit();
+                  if (window.confirm("FINAL SUBMISSION? This will lock your answers.")) handleFinalSubmit();
                 } else {
                   if (savingRef.current) return;
                   savingRef.current = true;
-                  API.post("/exam/submit-code", { userId, questionId: q._id, code: q.code }).finally(() => { savingRef.current = false; });
-                  setCurrent((c) => c + 1);
+                  try {
+                    await API.post("/exam/submit-code", { userId, questionId: q._id, code: q.code });
+                    setCurrent((c) => c + 1);
+                  } catch (err) {
+                    showAlert("Failed to save progress!");
+                  } finally {
+                    savingRef.current = false;
+                  }
                 }
               }}
-              className="px-12 py-4 bg-orange-500 hover:bg-orange-600 text-black rounded-2xl font-black shadow-lg"
+              className="px-12 py-4 bg-orange-500 hover:bg-orange-600 text-black rounded-2xl font-black shadow-lg disabled:opacity-50"
             >
-              {current === questions.length - 1 ? (submitting ? "SYNCING..." : "FINISH") : "SAVE & NEXT"}
+              {current === questions.length - 1 ? (submitting ? "SYNCING..." : "FINISH") : (savingRef.current ? "SAVING..." : "SAVE & NEXT")}
             </button>
           </div>
         </div>
