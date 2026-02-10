@@ -1,6 +1,44 @@
 @import "tailwindcss";
+:root {
+    --primary-orange: #FF8C00;
+    --dark-bg: #0f0f0f;
+    --card-bg: #1a1a1a;
+    --text-light: #ffffff;
+}
 
 body {
-  background-color: #0b0f1a;
-  color: #e5e7eb;
+    background-color: var(--dark-bg);
+    color: var(--text-light);
+    font-family: 'Segoe UI', sans-serif;
+    user-select: none; /* Prevent text selection */
+}
+
+/* Custom Modal instead of boring Alerts */
+.custom-modal {
+    background: var(--card-bg);
+    border: 2px solid var(--primary-orange);
+    border-radius: 12px;
+    padding: 25px;
+    box-shadow: 0 0 20px rgba(255, 140, 0, 0.3);
+}
+
+.btn-primary {
+    background-color: var(--primary-orange);
+    color: black;
+    font-weight: bold;
+    border: none;
+    transition: 0.3s;
+}
+
+.btn-primary:hover {
+    background-color: #e67e00;
+    transform: scale(1.05);
+}
+
+/* Warning Section */
+.warning-box {
+    border-left: 5px solid #ff0000;
+    background: rgba(255, 0, 0, 0.1);
+    padding: 15px;
+    margin-bottom: 20px;
 }

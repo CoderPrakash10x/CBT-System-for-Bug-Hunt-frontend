@@ -25,10 +25,16 @@ const AdminNavbar = () => {
         {/* RIGHT */}
         <div className="flex items-center gap-6">
           <Link
-            to="/leaderboard"
+            to="/admin/leaderboard"
             className="text-gray-400 hover:text-orange-500 font-black text-[10px] uppercase tracking-widest transition-all"
           >
             Live Leaderboard
+          </Link>
+          <Link
+            to="/admin/reports"
+            className="text-gray-400 hover:text-orange-500 font-black text-[10px] uppercase tracking-widest transition-all"
+          >
+            Live reports
           </Link>
 
           <button

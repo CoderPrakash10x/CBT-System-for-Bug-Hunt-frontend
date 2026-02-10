@@ -5,6 +5,7 @@ import Admin from "./pages/Admin";
 import Leaderboard from "./pages/Leaderboard";
 import Exit from "./pages/Exit";
 import AdminRoute from "./components/AdminRoute";
+import AdminReports from "./pages/admin/AdminReports";
 import AdminNavbar from "./components/AdminNavbar";
 
 const AdminLayout = () => (
@@ -22,13 +23,15 @@ const App = () => {
         <Route path="/" element={<Register />} />
         <Route path="/exam" element={<Exam />} />
         <Route path="/exit" element={<Exit />} />
-        <Route path="/leaderboard" element={<Leaderboard />} />
+        
         <Route path="/admin" element={<Admin />} />
 
         {/* ADMIN ONLY */}
         <Route element={<AdminRoute />}>
           <Route element={<AdminLayout />}>
             <Route path="/admin/dashboard" element={<Admin />} />
+            <Route path="/admin/reports" element={<AdminReports />} />
+            <Route path="/admin/leaderboard" element={<Leaderboard />} />
           </Route>
         </Route>
 
