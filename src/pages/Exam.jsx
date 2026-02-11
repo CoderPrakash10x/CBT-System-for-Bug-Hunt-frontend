@@ -220,7 +220,12 @@ const Exam = () => {
     );
   }
 
-  const q = questions[current];
+  const q = questions?.[current];
+
+  if (!q) {
+    return <Center text="Loading Question..." spinner />;
+  }
+
 
   return (
     <div className="h-screen bg-[#0a0a0b] text-white p-4 flex flex-col">
