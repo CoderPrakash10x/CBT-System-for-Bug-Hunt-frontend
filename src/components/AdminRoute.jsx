@@ -3,30 +3,34 @@ import { useEffect, useState } from "react";
 import { verifyAdminKey } from "../api/admin.api";
 
 const AdminRoute = () => {
-  const adminKey = localStorage.getItem("adminKey");
   const [isValid, setIsValid] = useState(null);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      if (!adminKey) {
-        setIsValid(false);
-        return;
-      }
-      try {
-        // Backend se pucho ki key sach mein sahi hai ya bas fake hai
-        await verifyAdminKey();
-        setIsValid(true);
-      } catch (err) {
-        console.error("Auth Failed");
-        localStorage.removeItem("adminKey"); // Fake key ko uda do
-        setIsValid(false);
-      }
-    };
-    checkAuth();
-  }, [adminKey]);
+    const key = localStorage.getItem("adminKey");
 
-  // Jab tak check ho raha hai, blank screen ya spinner dikhao
-  if (isValid === null) return <div className="min-h-screen bg-black" />;
+    if (!key) {
+      setIsValid(false);
+      return;
+    }
+
+    verifyAdminKey()
+      .then(() => setIsValid(true))
+      .catch(() => {
+        localStorage.removeItem("adminKey");
+        setIsValid(false);
+      });
+  }, []);
+
+  if (isValid === null) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0b] flex flex-col items-center justify-center gap-4">
+        <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-orange-500 font-black text-[10px] tracking-[0.3em] uppercase animate-pulse">
+          Authenticating Admin...
+        </p>
+      </div>
+    );
+  }
 
   return isValid ? <Outlet /> : <Navigate to="/admin" replace />;
 };

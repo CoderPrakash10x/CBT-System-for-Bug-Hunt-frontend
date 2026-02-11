@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import { getExam, joinExam, submitExam } from "../api/exam.api";
 import { getQuestions } from "../api/questions.api";
@@ -6,134 +7,184 @@ import API from "../api/axios";
 
 const Exam = () => {
   const userId = localStorage.getItem("userId");
+  const navigate = useNavigate();
 
   const [status, setStatus] = useState("loading");
   const [timeLeft, setTimeLeft] = useState(0);
   const [countdown, setCountdown] = useState(10);
   const [questions, setQuestions] = useState([]);
   const [current, setCurrent] = useState(0);
+
   const [submitting, setSubmitting] = useState(false);
-  const [modal, setModal] = useState({ show: false, message: "" });
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
   const [isFs, setIsFs] = useState(true);
   const [isReady, setIsReady] = useState(false);
+  const [canTrack, setCanTrack] = useState(false);
 
+  // 🔥 NEW STATES
+  const [violations, setViolations] = useState(0);
+  const [popup, setPopup] = useState({
+    show: false,
+    type: "", // "warning" | "submit"
+    message: "",
+  });
+
+  const examStartedRef = useRef(false);
+  const isFinishedRef = useRef(false);
   const timerRef = useRef(null);
-  const savingRef = useRef(false);
-  const lastViolationRef = useRef(0);
+  const editorRef = useRef(null);
 
-  /* ================= UI UTILS ================= */
-  const showAlert = (msg) => {
-    setModal({ show: true, message: msg });
-    setTimeout(() => setModal({ show: false, message: "" }), 4000);
-  };
+  /* ================= CLEAN SESSION ================= */
+  useEffect(() => {
+    if (!userId) {
+      navigate("/", { replace: true });
+      return;
+    }
 
+    if (!localStorage.getItem("examStarted")) {
+      localStorage.removeItem("examFinished");
+      localStorage.removeItem("disqualified");
+    }
+  }, [userId, navigate]);
+
+  /* ================= FULLSCREEN ================= */
   const enterFullscreen = () => {
     const el = document.documentElement;
-    const requestFs = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen || el.mozRequestFullScreen;
-    if (requestFs) {
-      requestFs.call(el)
-        .then(() => {
-          setIsFs(true);
-          if (status === "countdown" || isReady) {
-            startExamFlow();
-          }
-        })
-        .catch(() => {
-          setIsFs(false);
-          // Agar entry pe mana kiya toh seedha exit
-          window.location.replace("/exit");
-        });
-    }
+    el.requestFullscreen?.()
+      .then(() => {
+        setIsFs(true);
+        setTimeout(() => setCanTrack(true), 1500);
+      })
+      .catch(() => setIsFs(false));
   };
 
-  /* ================= FINAL SUBMIT (Aggressive Redirect) ================= */
-  const handleFinalSubmit = useCallback(async () => {
-    if (submitting) return;
+  /* ================= FINAL SUBMIT ================= */
+  const handleFinalSubmit = useCallback(async (reason = "normal") => {
+    if (submitting || isFinishedRef.current) return;
+    isFinishedRef.current = true;
     setSubmitting(true);
+
     try {
+      if (reason === "disqualified") {
+        localStorage.setItem("disqualified", "true");
+      }
       await submitExam({ userId });
+    } finally {
       localStorage.setItem("examFinished", "true");
       localStorage.removeItem("examStarted");
-
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => { });
-      }
-      // Replace use kar rahe hain taaki back na aa sake
-      window.location.replace("/exit");
-    } catch (err) {
-      window.location.replace("/exit");
+      document.fullscreenElement && document.exitFullscreen();
+      navigate("/exit", { replace: true });
     }
-  }, [userId, submitting]);
+  }, [userId, submitting, navigate]);
 
-  /* ================= ADMIN SYNC ================= */
+  /* ================= ANTI-CHEAT (FIXED FLOW) ================= */
+  useEffect(() => {
+    if (!canTrack || isFinishedRef.current) return;
+
+    const triggerViolation = () => {
+      setViolations(prev => {
+        const count = prev + 1;
+
+        // ⚠️ FIRST TIME → WARNING
+        if (count === 1) {
+          setCanTrack(false);
+          setIsFs(false);
+          setPopup({
+            show: true,
+            type: "warning",
+            message:
+              "⚠️ Warning: Tab switching or fullscreen exit detected. One more violation will disqualify you.",
+          });
+        }
+
+        // ❌ SECOND TIME → DISQUALIFY
+        if (count >= 2) {
+          handleFinalSubmit("disqualified");
+        }
+
+        return count;
+      });
+    };
+
+    const onBlur = () => triggerViolation();
+    const onVisibility = () => document.hidden && triggerViolation();
+    const onFsChange = () =>
+      !document.fullscreenElement && triggerViolation();
+
+    window.addEventListener("blur", onBlur);
+    document.addEventListener("visibilitychange", onVisibility);
+    document.addEventListener("fullscreenchange", onFsChange);
+
+    return () => {
+      window.removeEventListener("blur", onBlur);
+      document.removeEventListener("visibilitychange", onVisibility);
+      document.removeEventListener("fullscreenchange", onFsChange);
+    };
+  }, [canTrack, handleFinalSubmit]);
+
+  /* ================= EXAM POLLING ================= */
   useEffect(() => {
     const poll = async () => {
-      try {
-        const res = await getExam();
-        const examStatus = res.data.exam.status;
-        if (examStatus === "ended") {
-          handleFinalSubmit();
-          return;
-        }
-        if (status === "loading" || status === "waiting") {
-          if (examStatus === "live") setStatus("countdown");
-          else setStatus("waiting");
-        }
-      } catch {
-        if (status === "loading") setStatus("waiting");
+      if (isFinishedRef.current) return;
+      const res = await getExam();
+      const s = res.data.exam.status;
+
+      if (localStorage.getItem("examFinished")) {
+        navigate("/exit", { replace: true });
+        return;
+      }
+
+      if (s === "ended") handleFinalSubmit();
+      if (status === "loading" || status === "waiting") {
+        setStatus(s === "live" ? "countdown" : "waiting");
       }
     };
+
     poll();
     const i = setInterval(poll, 5000);
     return () => clearInterval(i);
-  }, [status, handleFinalSubmit]);
+  }, [status, handleFinalSubmit, navigate]);
 
   /* ================= COUNTDOWN ================= */
   useEffect(() => {
     if (status !== "countdown") return;
     if (countdown > 0) {
-      const t = setTimeout(() => setCountdown((c) => c - 1), 1000);
+      const t = setTimeout(() => setCountdown(c => c - 1), 1000);
       return () => clearTimeout(t);
-    } else {
-      setIsReady(true);
     }
+    setIsReady(true);
   }, [status, countdown]);
 
   /* ================= START EXAM ================= */
   const startExamFlow = async () => {
-    try {
-      if (!userId) return (window.location.href = "/");
-      const [joinRes, qRes] = await Promise.all([
-        joinExam(userId),
-        getQuestions(userId),
-      ]);
+    const [joinRes, qRes] = await Promise.all([
+      joinExam(userId),
+      getQuestions(userId),
+    ]);
 
-      if (joinRes.data.isDisqualified) {
-        window.location.replace("/exit");
-        return;
-      }
-
-      setTimeLeft(joinRes.data.remainingSeconds);
-      const fetchedQs = qRes.data.questions || [];
-      if (!fetchedQs.length) {
-        setStatus("waiting");
-        return;
-      }
-
-      setQuestions(fetchedQs.map((q) => ({ ...q, code: q.buggyCode })));
-      setStatus("live");
-      setIsReady(false);
-      localStorage.setItem("examStarted", "true");
-    } catch (err) {
-      setStatus("waiting");
+    if (joinRes.data.isDisqualified) {
+      navigate("/exit", { replace: true });
+      return;
     }
+
+    setTimeLeft(joinRes.data.remainingSeconds);
+    const qs = qRes.data.questions || [];
+    setQuestions(qs.map(q => ({ ...q, code: q.buggyCode })));
+
+    localStorage.setItem("examStarted", "true");
+    examStartedRef.current = true;
+    setStatus("live");
+    setIsReady(false);
+    enterFullscreen();
   };
 
-  /* ================= LIVE TIMER ================= */
+  /* ================= TIMER ================= */
   useEffect(() => {
     if (status !== "live") return;
     timerRef.current = setInterval(() => {
-      setTimeLeft((t) => {
+      setTimeLeft(t => {
         if (t <= 1) {
           clearInterval(timerRef.current);
           handleFinalSubmit();
@@ -145,183 +196,249 @@ const Exam = () => {
     return () => clearInterval(timerRef.current);
   }, [status, handleFinalSubmit]);
 
-  /* ================= ANTI-CHEAT (INSTANT KICK) ================= */
-  useEffect(() => {
-    if (status !== "live") return;
-
-    // Instant exit without warning
-    const instantKick = () => {
-      if (!submitting) {
-        localStorage.setItem("disqualified", "true"); // 👈 Ye line add kar do
-        handleFinalSubmit();
-      }
-    };
-
-    const fsChange = () => {
-      if (!document.fullscreenElement) instantKick();
-    };
-
-    const onVisibility = () => {
-      if (document.hidden) instantKick();
-    };
-
-    const handleBlur = () => instantKick();
-
-    const handleKeydown = (e) => {
-      // Block Keys: F5, Ctrl+R, F12, Ctrl+Shift+I, Ctrl+U, Esc (27)
-      if (
-        e.keyCode === 116 || (e.ctrlKey && e.keyCode === 82) ||
-        e.keyCode === 123 || (e.ctrlKey && e.shiftKey && e.keyCode === 73) ||
-        (e.ctrlKey && e.keyCode === 85) || e.keyCode === 27
-      ) {
-        e.preventDefault();
-        if (e.keyCode === 27) instantKick(); // Esc par instant kick
-        return false;
-      }
-    };
-
-    window.addEventListener("blur", handleBlur);
-    document.addEventListener("visibilitychange", onVisibility);
-    document.addEventListener("fullscreenchange", fsChange);
-    document.addEventListener("keydown", handleKeydown);
-    document.addEventListener("contextmenu", (e) => e.preventDefault());
-
-    return () => {
-      window.removeEventListener("blur", handleBlur);
-      document.removeEventListener("visibilitychange", onVisibility);
-      document.removeEventListener("fullscreenchange", fsChange);
-      document.removeEventListener("keydown", handleKeydown);
-    };
-  }, [status, handleFinalSubmit, submitting]);
-
-  /* ================= UI STATES (REMAINING AS IS) ================= */
-  if (status === "loading" || status === "waiting")
+  /* ================= UI STATES ================= */
+  if (status === "loading" || status === "waiting") {
     return <Center text="Establishing Secure Connection..." spinner />;
+  }
 
-  if (status === "countdown")
+  if (status === "countdown") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-black">
-        <div className="text-orange-500 text-sm font-black tracking-[0.5em] mb-4 uppercase">Locking Interface</div>
-        <div className="text-[14rem] font-black text-white leading-none mb-10">{countdown}</div>
+      <div className="h-screen flex flex-col items-center justify-center bg-black">
+        <div className="text-orange-500 text-xs font-black tracking-[0.4em] mb-6">
+          LOCKING INTERFACE
+        </div>
+        <div className="text-[9rem] font-black">{countdown}</div>
         {isReady && (
           <button
-            onClick={enterFullscreen}
-            className="px-16 py-6 bg-orange-500 text-black font-black text-2xl rounded-2xl animate-pulse shadow-[0_0_50px_rgba(249,115,22,0.4)]"
+            onClick={startExamFlow}
+            className="px-14 py-5 bg-orange-500 text-black font-black rounded-2xl animate-pulse"
           >
             START HUNT
           </button>
         )}
       </div>
     );
+  }
 
-  if (status === "live") {
-    if (!questions.length) return <Center text="Fetching Questions..." spinner />;
-    const q = questions[current];
+  const q = questions[current];
 
-    return (
-      <div className="min-h-screen bg-[#0a0a0b] text-white p-4 font-sans select-none">
-        {/* Anti-cheat overlay handled by instantKick redirect, so no breach UI needed */}
+  return (
+    <div className="h-screen bg-[#0a0a0b] text-white p-4 flex flex-col">
 
-        {modal.show && (
-          <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[999] bg-red-600 text-white px-8 py-4 rounded-full font-black animate-bounce">
-            ⚠️ {modal.message}
-          </div>
-        )}
-
-        <div className="max-w-[1600px] mx-auto">
-          <div className="flex justify-between items-center mb-4 bg-[#141417] p-4 rounded-2xl border border-white/5 shadow-xl">
-            <div className="flex items-center gap-3">
-              <div className="h-3 w-3 bg-orange-500 rounded-full animate-pulse"></div>
-              <span className="font-black text-2xl tracking-tighter italic">BUG<span className="text-orange-500">HUNT</span></span>
-            </div>
-
-            <div className="bg-black/50 px-8 py-2 rounded-xl border border-orange-500/20 font-mono text-4xl font-black text-orange-500">
-              {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, "0")}
-            </div>
-
-            <div className="text-right">
-              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Progress</p>
-              <p className="font-black text-orange-500">{current + 1} / {questions.length}</p>
-            </div>
-          </div>
-
-          <div className="grid lg:grid-cols-12 gap-4">
-            <div className="lg:col-span-4 bg-[#141417] p-8 rounded-[2rem] border border-white/5 h-[calc(100vh-180px)] overflow-y-auto custom-scrollbar">
-              <div className="inline-block px-3 py-1 bg-orange-500/10 border border-orange-500/20 rounded-md mb-4 text-orange-500 text-[10px] font-black uppercase tracking-widest">Task Definition</div>
-              <h2 className="text-2xl font-bold mb-6 leading-tight">{q.problemStatement}</h2>
-              <div className="space-y-6">
-                <div>
-                  <p className="text-orange-500 font-bold uppercase text-xs mb-2">Description</p>
-                  <p className="text-gray-400 text-sm leading-relaxed">{q.description}</p>
-                </div>
-                {q.constraints && (
-                  <div>
-                    <p className="text-orange-500 font-bold uppercase text-xs mb-2">Constraints</p>
-                    <pre className="text-gray-400 text-xs font-mono bg-black/30 p-3 rounded-lg">{q.constraints}</pre>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="lg:col-span-8 rounded-[2rem] overflow-hidden border-2 border-white/5 relative group">
-              <Editor
-                height="calc(100vh - 180px)"
-                theme="vs-dark"
-                language={q.language === "c" ? "cpp" : q.language}
-                value={q.code}
-                onChange={(val) => {
-                  setQuestions((prev) => {
-                    const copy = [...prev];
-                    copy[current].code = val;
-                    return copy;
-                  });
-                }}
-                options={{ fontSize: 18, minimap: { enabled: false }, contextmenu: false, quickSuggestions: false }}
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-between items-center mt-6">
+      {/* 🔔 WARNING POPUP */}
+      {popup.show && popup.type === "warning" && (
+        <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center">
+          <div className="bg-[#141417] border border-orange-500/40 rounded-2xl p-8 max-w-md text-center">
+            <h2 className="text-orange-500 font-black text-xl mb-4">
+              SECURITY WARNING
+            </h2>
+            <p className="text-gray-300 mb-6">{popup.message}</p>
             <button
-              disabled={current === 0 || submitting}
-              onClick={() => setCurrent((c) => c - 1)}
-              className={`px-10 py-4 rounded-2xl font-black transition-all ${current === 0 ? 'opacity-20' : 'bg-white/5 hover:bg-white/10'}`}
-            >PREVIOUS</button>
-
-            <button
-              disabled={submitting}
-              onClick={async () => {
-                if (current === questions.length - 1) {
-                  if (window.confirm("FINAL SUBMISSION? This will lock your answers.")) handleFinalSubmit();
-                } else {
-                  if (savingRef.current) return;
-                  savingRef.current = true;
-                  try {
-                    await API.post("/exam/submit-code", { userId, questionId: q._id, code: q.code });
-                    setCurrent((c) => c + 1);
-                  } catch (err) {
-                    showAlert("Failed to save progress!");
-                  } finally {
-                    savingRef.current = false;
-                  }
-                }
+              onClick={() => {
+                setPopup({ show: false, type: "", message: "" });
+                enterFullscreen();
               }}
-              className="px-12 py-4 bg-orange-500 hover:bg-orange-600 text-black rounded-2xl font-black shadow-lg disabled:opacity-50"
+              className="px-10 py-3 bg-orange-500 text-black font-black rounded-xl"
             >
-              {current === questions.length - 1 ? (submitting ? "SYNCING..." : "FINISH") : (savingRef.current ? "SAVING..." : "SAVE & NEXT")}
+              RE-ENTER FULLSCREEN
             </button>
           </div>
         </div>
+      )}
+
+      {/* 🔔 SUBMIT POPUP */}
+      {popup.show && popup.type === "submit" && (
+        <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center">
+          <div className="bg-[#141417] border border-white/10 rounded-2xl p-8 max-w-md text-center">
+            <h2 className="text-orange-500 font-black text-xl mb-4">
+              FINAL SUBMISSION
+            </h2>
+            <p className="text-gray-300 mb-8">{popup.message}</p>
+            <div className="flex gap-4 justify-center">
+              <button
+                onClick={() => setPopup({ show: false, type: "", message: "" })}
+                className="px-6 py-3 bg-white/10 rounded-xl font-black"
+              >
+                CANCEL
+              </button>
+              <button
+                onClick={() => handleFinalSubmit()}
+                className="px-6 py-3 bg-orange-500 text-black rounded-xl font-black"
+              >
+                SUBMIT
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FULLSCREEN BLOCK */}
+      {!isFs && (
+        <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50">
+          <button
+            onClick={enterFullscreen}
+            className="px-12 py-5 bg-orange-500 text-black font-black rounded-2xl"
+          >
+            RE-ENTER FULLSCREEN
+          </button>
+        </div>
+      )}
+
+      {/* HEADER */}
+      <div className="flex justify-between bg-[#141417] px-6 py-4 rounded-2xl mb-4">
+        <span className="font-black italic text-2xl">
+          BUG<span className="text-orange-500">HUNT</span>
+        </span>
+        <span className="font-mono text-orange-500 text-2xl">
+          {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, "0")}
+        </span>
+        <span className="font-black text-orange-500">
+          {current + 1}/{questions.length}
+        </span>
       </div>
-    );
-  }
-  return null;
+
+      {/* BODY */}
+      <div className="grid lg:grid-cols-12 gap-4 flex-1 min-h-0">
+        <div className="lg:col-span-4 bg-[#141417] p-6 rounded-2xl overflow-y-auto space-y-6">
+
+          {/* PROBLEM STATEMENT */}
+          <div>
+            <h2 className="text-orange-500 font-black text-lg mb-2 uppercase tracking-wide">
+              Problem Statement
+            </h2>
+            <p className="text-gray-200 text-sm leading-relaxed whitespace-pre-line">
+              {q.problemStatement}
+            </p>
+          </div>
+
+          {/* CONSTRAINTS */}
+          {q.constraints?.length > 0 && (
+            <div>
+              <h3 className="text-orange-500 font-black text-sm mb-2 uppercase">
+                Constraints
+              </h3>
+              <ul className="list-disc list-inside text-gray-400 text-sm space-y-1">
+                {q.constraints.map((c, i) => (
+                  <li key={i}>{c}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* EXAMPLES */}
+          {q.examples?.length > 0 && (
+            <div>
+              <h3 className="text-orange-500 font-black text-sm mb-2 uppercase">
+                Examples
+              </h3>
+
+              <div className="space-y-3">
+                {q.examples.map((ex, i) => (
+                  <div
+                    key={i}
+                    className="bg-black/40 border border-white/5 rounded-xl p-3 text-sm"
+                  >
+                    <div className="mb-1">
+                      <span className="text-orange-400 font-bold">Input:</span>
+                      <pre className="text-gray-300 whitespace-pre-wrap">
+                        {ex.input}
+                      </pre>
+                    </div>
+                    <div>
+                      <span className="text-orange-400 font-bold">Output:</span>
+                      <pre className="text-gray-300 whitespace-pre-wrap">
+                        {ex.output}
+                      </pre>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+        </div>
+
+
+        <div className="lg:col-span-8 rounded-2xl overflow-hidden bg-[#1e1e1e]">
+          <Editor
+            height="100%"
+            theme="vs-dark"
+            language={q.language === "c" ? "cpp" : q.language}
+            value={q.code}
+            onMount={(editor) => (editorRef.current = editor)}
+            onChange={(val) => {
+              setQuestions(prev => {
+                const c = [...prev];
+                c[current].code = val || "";
+                return c;
+              });
+            }}
+            options={{
+              fontSize: 15,
+              lineHeight: 22,
+              minimap: { enabled: false },
+              wordWrap: "on",
+            }}
+          />
+        </div>
+      </div>
+
+      {/* FOOTER */}
+      <div className="flex justify-between mt-4">
+        <button
+          disabled={current === 0}
+          onClick={() => setCurrent(c => c - 1)}
+          className="px-8 py-3 bg-white/5 rounded-xl font-black disabled:opacity-30"
+        >
+          PREVIOUS
+        </button>
+
+        <button
+          disabled={saving || submitting}
+          onClick={async () => {
+            if (current === questions.length - 1) {
+              setPopup({
+                show: true,
+                type: "submit",
+                message:
+                  "Are you sure you want to submit your exam? This cannot be undone.",
+              });
+            } else {
+              setSaving(true);
+              await API.post("/exam/submit-code", {
+                userId,
+                questionId: q._id,
+                code: q.code,
+              });
+              setSaved(true);
+              setTimeout(() => setSaved(false), 1200);
+              setSaving(false);
+              setCurrent(c => c + 1);
+            }
+          }}
+          className="px-10 py-3 bg-orange-500 text-black rounded-xl font-black"
+        >
+          {saving
+            ? "SAVING..."
+            : saved
+              ? "SAVED ✓"
+              : current === questions.length - 1
+                ? "FINISH"
+                : "SAVE & NEXT"}
+        </button>
+      </div>
+    </div>
+  );
 };
 
 const Center = ({ text, spinner }) => (
-  <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0b] gap-8">
-    {spinner && <div className="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>}
-    <div className="text-orange-500 font-black tracking-widest uppercase text-center px-4">{text}</div>
+  <div className="h-screen flex flex-col items-center justify-center bg-[#0a0a0b]">
+    {spinner && (
+      <div className="w-14 h-14 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mb-6" />
+    )}
+    <p className="text-orange-500 font-black uppercase text-xs tracking-widest">
+      {text}
+    </p>
   </div>
 );
 
