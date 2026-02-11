@@ -359,7 +359,15 @@ const Exam = () => {
         </div>
 
 
-        <div className="lg:col-span-8 rounded-2xl overflow-hidden bg-[#1e1e1e]">
+        <div className="lg:col-span-8 rounded-2xl overflow-hidden bg-[#1e1e1e] flex flex-col">
+
+          {/* 🛠 EDITOR INSTRUCTION (PURE UI, NO LOGIC) */}
+          <div className="px-4 py-3 bg-black/40 border-b border-white/5 text-xs font-mono text-orange-400 tracking-wide">
+            🛠 Fix the bug <span className="font-bold">ONLY</span> inside the function below.
+            <br />
+            ⛔ Do <span className="font-bold">NOT</span> add main(), input/output or extra code.
+          </div>
+
           <Editor
             height="100%"
             theme="vs-dark"
@@ -381,6 +389,7 @@ const Exam = () => {
             }}
           />
         </div>
+
       </div>
 
       {/* FOOTER */}
