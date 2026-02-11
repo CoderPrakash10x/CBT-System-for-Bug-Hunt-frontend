@@ -36,6 +36,14 @@ const Exam = () => {
   const timerRef = useRef(null);
   const editorRef = useRef(null);
 
+  /* ================= RIGHT CLICK BLOCK ================= */
+  useEffect(() => {
+    const blockRightClick = (e) => e.preventDefault();
+    document.addEventListener("contextmenu", blockRightClick);
+    return () => document.removeEventListener("contextmenu", blockRightClick);
+  }, []);
+
+
   /* ================= CLEAN SESSION ================= */
   useEffect(() => {
     if (!userId) {
@@ -410,6 +418,17 @@ const Exam = () => {
         <button
           disabled={saving || submitting}
           onClick={async () => {
+
+            // 🔥 ALWAYS SAVE CURRENT QUESTION FIRST
+            setSaving(true);
+            await API.post("/exam/submit-code", {
+              userId,
+              questionId: q._id,
+              code: q.code,
+            });
+            setSaving(false);
+
+            // 🔥 LAST QUESTION → OPEN FINAL SUBMIT POPUP
             if (current === questions.length - 1) {
               setPopup({
                 show: true,
@@ -418,15 +437,8 @@ const Exam = () => {
                   "Are you sure you want to submit your exam? This cannot be undone.",
               });
             } else {
-              setSaving(true);
-              await API.post("/exam/submit-code", {
-                userId,
-                questionId: q._id,
-                code: q.code,
-              });
               setSaved(true);
               setTimeout(() => setSaved(false), 1200);
-              setSaving(false);
               setCurrent(c => c + 1);
             }
           }}
@@ -440,6 +452,7 @@ const Exam = () => {
                 ? "FINISH"
                 : "SAVE & NEXT"}
         </button>
+
       </div>
     </div>
   );
