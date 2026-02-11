@@ -78,7 +78,10 @@ const Exam = () => {
       if (reason === "disqualified") {
         localStorage.setItem("disqualified", "true");
       }
-      await submitExam({ userId });
+      await submitExam({
+        userId,
+        reason: reason // "disqualified" | "normal"
+      });
     } finally {
       localStorage.setItem("examFinished", "true");
       localStorage.removeItem("examStarted");
@@ -188,21 +191,60 @@ const Exam = () => {
     enterFullscreen();
   };
 
-  /* ================= TIMER ================= */
   useEffect(() => {
-    if (status !== "live") return;
-    timerRef.current = setInterval(() => {
-      setTimeLeft(t => {
-        if (t <= 1) {
-          clearInterval(timerRef.current);
-          handleFinalSubmit();
-          return 0;
+  if (status !== "live") return;
+
+  const t = setInterval(() => {
+    setTimeLeft(prev => {
+      if (prev <= 1) {
+        clearInterval(t);
+        handleFinalSubmit();
+        return 0;
+      }
+      return prev - 1;
+    });
+  }, 1000);
+
+  return () => clearInterval(t);
+}, [status, handleFinalSubmit]);
+
+
+ useEffect(() => {
+  if (status !== "live") return;
+
+  const sync = async () => {
+    try {
+      const res = await getExam();
+      const exam = res.data.exam;
+      if (!exam?.endTime) return;
+
+      const serverRemaining = Math.max(
+        Math.floor(
+          (new Date(exam.endTime).getTime() - Date.now()) / 1000
+        ),
+        0
+      );
+
+      setTimeLeft(prev => {
+        // 🛡 correct ONLY if drift > 5 sec
+        if (Math.abs(prev - serverRemaining) > 5) {
+          return serverRemaining;
         }
-        return t - 1;
+        return prev;
       });
-    }, 1000);
-    return () => clearInterval(timerRef.current);
-  }, [status, handleFinalSubmit]);
+
+      if (serverRemaining <= 0) {
+        handleFinalSubmit();
+      }
+    } catch {}
+  };
+
+  const i = setInterval(sync, 15000);
+  return () => clearInterval(i);
+}, [status, handleFinalSubmit]);
+
+
+
 
   /* ================= UI STATES ================= */
   if (status === "loading" || status === "waiting") {
@@ -213,7 +255,7 @@ const Exam = () => {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-black">
         <div className="text-orange-500 text-xs font-black tracking-[0.4em] mb-6">
-          LOCKING INTERFACE
+          Now The Wait is Over Prepare for hunting...
         </div>
         <div className="text-[9rem] font-black">{countdown}</div>
         {isReady && (
@@ -416,19 +458,11 @@ const Exam = () => {
         </button>
 
         <button
-          disabled={saving || submitting}
+
           onClick={async () => {
+            if (saving || submitting) return; // 🔒 HARD GUARD
 
-            // 🔥 ALWAYS SAVE CURRENT QUESTION FIRST
-            setSaving(true);
-            await API.post("/exam/submit-code", {
-              userId,
-              questionId: q._id,
-              code: q.code,
-            });
-            setSaving(false);
-
-            // 🔥 LAST QUESTION → OPEN FINAL SUBMIT POPUP
+            // 🔥 LAST QUESTION → ONLY POPUP (NO SAVE & NEXT)
             if (current === questions.length - 1) {
               setPopup({
                 show: true,
@@ -436,11 +470,31 @@ const Exam = () => {
                 message:
                   "Are you sure you want to submit your exam? This cannot be undone.",
               });
-            } else {
-              setSaved(true);
-              setTimeout(() => setSaved(false), 1200);
-              setCurrent(c => c + 1);
+              return;
             }
+
+            // 🔥 SAVE CURRENT QUESTION
+            setSaving(true);
+
+            // ❗ DO NOT AWAIT (network slow safe)
+            API.post("/exam/submit-code", {
+              userId,
+              questionId: q._id,
+              code: q.code,
+            }).catch(() => { });
+
+            // ✅ UI FEEDBACK
+            setSaved(true);
+            setTimeout(() => setSaved(false), 600);
+
+            // ✅ MOVE ONLY ONCE
+            setCurrent(prev => prev + 1);
+
+            // 🔓 RELEASE SAVE LOCK
+            setTimeout(() => {
+              setSaving(false);
+            }, 600);
+
           }}
           className="px-10 py-3 bg-orange-500 text-black rounded-xl font-black"
         >

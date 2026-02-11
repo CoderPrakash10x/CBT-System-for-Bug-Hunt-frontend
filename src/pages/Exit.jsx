@@ -22,43 +22,39 @@ const Exit = () => {
   /* ================= FINAL EXIT ================= */
   const handleFullExit = () => {
     // ✅ CLEAN SESSION (MOST IMPORTANT FIX)
-    localStorage.removeItem("examFinished");
-    localStorage.removeItem("examStarted");
-    localStorage.removeItem("disqualified");
-    localStorage.removeItem("userId");
+    // localStorage.removeItem("examFinished");
+    // localStorage.removeItem("examStarted");
+    // localStorage.removeItem("disqualified");
+    // localStorage.removeItem("userId");
 
     // 🔁 Fresh start
-    navigate("/", { replace: true });
+    window.location.href = "https://evolvera-frontend-u8aw.vercel.app";
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#050505] text-white relative overflow-hidden">
       {/* Background Glow */}
       <div
-        className={`absolute -top-32 -left-32 w-[500px] h-[500px] rounded-full blur-[160px] ${
-          isDisqualified ? "bg-red-600/10" : "bg-orange-600/10"
-        }`}
+        className={`absolute -top-32 -left-32 w-[500px] h-[500px] rounded-full blur-[160px] ${isDisqualified ? "bg-red-600/10" : "bg-orange-600/10"
+          }`}
       />
       <div
-        className={`absolute -bottom-32 -right-32 w-[500px] h-[500px] rounded-full blur-[160px] ${
-          isDisqualified ? "bg-red-500/10" : "bg-orange-500/10"
-        }`}
+        className={`absolute -bottom-32 -right-32 w-[500px] h-[500px] rounded-full blur-[160px] ${isDisqualified ? "bg-red-500/10" : "bg-orange-500/10"
+          }`}
       />
 
       <div className="relative z-10 bg-[#0f0f11]/80 backdrop-blur-xl border border-white/5 rounded-[3rem] p-14 max-w-lg w-full text-center shadow-[0_20px_100px_rgba(0,0,0,0.85)]">
         {/* ICON */}
         <div className="relative w-28 h-28 mx-auto mb-10">
           <div
-            className={`absolute inset-0 rounded-full animate-ping opacity-20 ${
-              isDisqualified ? "bg-red-500" : "bg-orange-500"
-            }`}
+            className={`absolute inset-0 rounded-full animate-ping opacity-20 ${isDisqualified ? "bg-red-500" : "bg-orange-500"
+              }`}
           />
           <div
-            className={`relative w-full h-full rounded-full flex items-center justify-center bg-gradient-to-tr ${
-              isDisqualified
+            className={`relative w-full h-full rounded-full flex items-center justify-center bg-gradient-to-tr ${isDisqualified
                 ? "from-red-600 to-red-400"
                 : "from-orange-600 to-orange-400"
-            }`}
+              }`}
           >
             {isDisqualified ? (
               <svg
@@ -94,9 +90,8 @@ const Exit = () => {
         </h1>
 
         <div
-          className={`h-1 w-20 mx-auto rounded-full mb-8 ${
-            isDisqualified ? "bg-red-500" : "bg-orange-500"
-          }`}
+          className={`h-1 w-20 mx-auto rounded-full mb-8 ${isDisqualified ? "bg-red-500" : "bg-orange-500"
+            }`}
         />
 
         <p className="text-gray-400 text-sm leading-relaxed mb-12 px-4">
@@ -108,11 +103,10 @@ const Exit = () => {
         {/* EXIT */}
         <button
           onClick={handleFullExit}
-          className={`w-full py-5 rounded-2xl font-black text-lg tracking-widest transition-all active:scale-95 ${
-            isDisqualified
+          className={`w-full py-5 rounded-2xl font-black text-lg tracking-widest transition-all active:scale-95 ${isDisqualified
               ? "bg-red-600 hover:bg-red-700 text-black"
               : "bg-orange-500 hover:bg-orange-600 text-black"
-          }`}
+            }`}
         >
           EXIT PORTAL
         </button>
