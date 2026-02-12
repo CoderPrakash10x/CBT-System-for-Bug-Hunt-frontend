@@ -381,7 +381,7 @@ const Exam = () => {
           )}
 
           {/* EXAMPLES */}
-          {q.examples?.length > 0 && (
+          {/* {q.examples?.length > 0 && (
             <div>
               <h3 className="text-orange-500 font-black text-sm mb-2 uppercase">
                 Examples
@@ -409,7 +409,7 @@ const Exam = () => {
                 ))}
               </div>
             </div>
-          )}
+          )} */}
 
         </div>
 
@@ -420,7 +420,8 @@ const Exam = () => {
           <div className="px-4 py-3 bg-black/40 border-b border-white/5 text-xs font-mono text-orange-400 tracking-wide">
             🛠 Fix the bug <span className="font-bold">ONLY</span> inside the function below.
             <br />
-            ⛔ Do <span className="font-bold">NOT</span> add main(), input/output or extra code.
+            {/* 🔥 BLIND MODE UI MSG */}
+            <span className="text-gray-500 italic">Results are hidden during exam mode.</span>
           </div>
 
           <Editor
@@ -473,25 +474,23 @@ const Exam = () => {
               return;
             }
 
-            // 🔥 SAVE CURRENT QUESTION
+            // 🔒 SAVE LOGIC (BLIND - NO VERDICT DISPLAYED)
             setSaving(true);
+            try {
+              await API.post("/exam/submit-code", {
+                userId,
+                questionId: q._id,
+                code: q.code,
+              });
+              // Note: Result hum le hi nahi rahe response se user ko dikhane ke liye
+              setSaved(true);
+            } catch (err) {
+              console.error("Save failed");
+            }
 
-            // ❗ DO NOT AWAIT (network slow safe)
-            API.post("/exam/submit-code", {
-              userId,
-              questionId: q._id,
-              code: q.code,
-            }).catch(() => { });
-
-            // ✅ UI FEEDBACK
-            setSaved(true);
-            setTimeout(() => setSaved(false), 600);
-
-            // ✅ MOVE ONLY ONCE
-            setCurrent(prev => prev + 1);
-
-            // 🔓 RELEASE SAVE LOCK
             setTimeout(() => {
+              setSaved(false);
+              setCurrent(c => c + 1);
               setSaving(false);
             }, 600);
 
