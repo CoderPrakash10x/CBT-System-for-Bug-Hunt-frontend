@@ -192,56 +192,56 @@ const Exam = () => {
   };
 
   useEffect(() => {
-  if (status !== "live") return;
+    if (status !== "live") return;
 
-  const t = setInterval(() => {
-    setTimeLeft(prev => {
-      if (prev <= 1) {
-        clearInterval(t);
-        handleFinalSubmit();
-        return 0;
-      }
-      return prev - 1;
-    });
-  }, 1000);
-
-  return () => clearInterval(t);
-}, [status, handleFinalSubmit]);
-
-
- useEffect(() => {
-  if (status !== "live") return;
-
-  const sync = async () => {
-    try {
-      const res = await getExam();
-      const exam = res.data.exam;
-      if (!exam?.endTime) return;
-
-      const serverRemaining = Math.max(
-        Math.floor(
-          (new Date(exam.endTime).getTime() - Date.now()) / 1000
-        ),
-        0
-      );
-
+    const t = setInterval(() => {
       setTimeLeft(prev => {
-        // 🛡 correct ONLY if drift > 5 sec
-        if (Math.abs(prev - serverRemaining) > 5) {
-          return serverRemaining;
+        if (prev <= 1) {
+          clearInterval(t);
+          handleFinalSubmit();
+          return 0;
         }
-        return prev;
+        return prev - 1;
       });
+    }, 1000);
 
-      if (serverRemaining <= 0) {
-        handleFinalSubmit();
-      }
-    } catch {}
-  };
+    return () => clearInterval(t);
+  }, [status, handleFinalSubmit]);
 
-  const i = setInterval(sync, 15000);
-  return () => clearInterval(i);
-}, [status, handleFinalSubmit]);
+
+  useEffect(() => {
+    if (status !== "live") return;
+
+    const sync = async () => {
+      try {
+        const res = await getExam();
+        const exam = res.data.exam;
+        if (!exam?.endTime) return;
+
+        const serverRemaining = Math.max(
+          Math.floor(
+            (new Date(exam.endTime).getTime() - Date.now()) / 1000
+          ),
+          0
+        );
+
+        setTimeLeft(prev => {
+          // 🛡 correct ONLY if drift > 5 sec
+          if (Math.abs(prev - serverRemaining) > 5) {
+            return serverRemaining;
+          }
+          return prev;
+        });
+
+        if (serverRemaining <= 0) {
+          handleFinalSubmit();
+        }
+      } catch { }
+    };
+
+    const i = setInterval(sync, 15000);
+    return () => clearInterval(i);
+  }, [status, handleFinalSubmit]);
 
 
 
@@ -461,39 +461,57 @@ const Exam = () => {
         <button
 
           onClick={async () => {
-            if (saving || submitting) return; // 🔒 HARD GUARD
+            if (saving || submitting || isFinishedRef.current) return;
 
-            // 🔥 LAST QUESTION → ONLY POPUP (NO SAVE & NEXT)
             if (current === questions.length - 1) {
               setPopup({
                 show: true,
                 type: "submit",
-                message:
-                  "Are you sure you want to submit your exam? This cannot be undone.",
+                message: "Are you sure? This cannot be undone.",
               });
               return;
             }
 
-            // 🔒 SAVE LOGIC (BLIND - NO VERDICT DISPLAYED)
+            // 🔥 DIRTY CHECKING: Agar code change nahi hua toh API call mat karo
+            // q.buggyCode humein starting point deta hai, aur q.code current value
+            if (q.code === q.buggyCode) {
+              setCurrent(c => c + 1);
+              return;
+            }
+
             setSaving(true);
             try {
-              await API.post("/exam/submit-code", {
+              // 1. Timeout wrap taaki agar network slow ho toh request infinite na phase
+              const response = await API.post("/exam/submit-code", {
                 userId,
                 questionId: q._id,
                 code: q.code,
-              });
-              // Note: Result hum le hi nahi rahe response se user ko dikhane ke liye
+              }, { timeout: 10000 }); // 10 sec timeout
+
               setSaved(true);
+              setTimeout(() => {
+                setSaved(false);
+                setCurrent(c => c + 1);
+                setSaving(false);
+              }, 600);
+
             } catch (err) {
-              console.error("Save failed");
-            }
-
-            setTimeout(() => {
-              setSaved(false);
-              setCurrent(c => c + 1);
+              console.error("Save failed:", err);
               setSaving(false);
-            }, 600);
 
+              // 2. 409 handle karein bina disqualify kiye (agar breach nahi hai)
+              if (err.response?.status === 409) {
+                // Check karein agar backend ne actually disqualify kiya hai
+                if (err.response.data?.isDisqualified) {
+                  navigate("/exit", { replace: true });
+                } else {
+                  // Sirf sync issue hai, user ko next par jaane do
+                  setCurrent(c => c + 1);
+                }
+              } else {
+                alert("Network slow hai, par tension mat lo. Dubara click karo.");
+              }
+            }
           }}
           className="px-10 py-3 bg-orange-500 text-black rounded-xl font-black"
         >
