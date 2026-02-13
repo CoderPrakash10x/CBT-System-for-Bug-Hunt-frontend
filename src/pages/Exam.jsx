@@ -22,6 +22,8 @@ const Exam = () => {
   const [isFs, setIsFs] = useState(true);
   const [isReady, setIsReady] = useState(false);
   const [canTrack, setCanTrack] = useState(false);
+  const [starting, setStarting] = useState(false);
+
 
   // 🔥 NEW STATES
   const [violations, setViolations] = useState(0);
@@ -260,11 +262,32 @@ const Exam = () => {
         <div className="text-[9rem] font-black">{countdown}</div>
         {isReady && (
           <button
-            onClick={startExamFlow}
-            className="px-14 py-5 bg-orange-500 text-black font-black rounded-2xl animate-pulse"
+            onClick={async () => {
+              if (starting) return;      // 🔒 double click block
+              setStarting(true);         // 🔄 loading on
+              await startExamFlow();     // 🔥 existing logic
+            }}
+            disabled={starting}
+            className={`
+    px-14 py-5 rounded-2xl font-black
+    transition-all duration-200
+    select-none
+
+    ${starting
+                ? "bg-orange-400 text-black cursor-not-allowed"
+                : "bg-orange-500 text-black cursor-pointer animate-pulse hover:scale-[1.03] active:scale-95"}
+  `}
           >
-            START HUNT
+            {starting ? (
+              <span className="flex items-center gap-3">
+                <span className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                STARTING...
+              </span>
+            ) : (
+              "START HUNT"
+            )}
           </button>
+
         )}
       </div>
     );
