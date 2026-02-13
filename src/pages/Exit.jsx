@@ -21,11 +21,11 @@ const Exit = () => {
 
   /* ================= FINAL EXIT ================= */
   const handleFullExit = () => {
-    // ✅ CLEAN SESSION (MOST IMPORTANT FIX)
-    // localStorage.removeItem("examFinished");
-    // localStorage.removeItem("examStarted");
-    // localStorage.removeItem("disqualified");
-    // localStorage.removeItem("userId");
+    
+    localStorage.removeItem("examFinished");
+    localStorage.removeItem("examStarted");
+    localStorage.removeItem("disqualified");
+    localStorage.removeItem("userId");
 
     // 🔁 Fresh start
     window.location.href = "https://evolvera-frontend-u8aw.vercel.app";
